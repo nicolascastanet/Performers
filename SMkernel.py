@@ -31,25 +31,29 @@ class SMapprox(nn.Module):
             normalizer = 1 / (d ** 0.25)
             q_prime = phi(q * normalizer)
             k_prime = phi(k * normalizer)
+
             d_inv = torch.diag(1 / (q_prime @ (k_prime.T @ torch.ones(l))))
             return d_inv @ (q_prime @ (k_prime.T @ v))
 
 
         # Batch mode
         elif len(q.shape) == 3:
-            batch_size, l, d = q.shape
+            _, l, d = q.shape
             normalizer = 1 / (d ** 0.25)
             out = []
+            
+            q_prime = phi(q * normalizer)
+            k_prime = phi(k * normalizer)
 
-            for i in range(batch_size):
+            diag_coeff = 1 / torch.bmm(q_prime, k_prime.transpose(1, 2).sum(2).unsqueeze(2)).squeeze(2)
+            d_inv = torch.diag_embed(diag_coeff)
 
-                q_prime = phi(q[i] * normalizer)
-                k_prime = phi(k[i] * normalizer)
-                d_inv = torch.diag(1 / (q_prime @ (k_prime.T @ torch.ones(l))))
-                res = d_inv @ (q_prime @ (k_prime.T @ v[i]))
-                out.append(res)
+            c1 = torch.bmm(k_prime.transpose(1,2),v)
+            c2 = torch.bmm(q_prime,c1)
+            out = torch.bmm(d_inv,c2)
 
-            return torch.stack(out)
+            return out
+
 
 
     # random feature map
