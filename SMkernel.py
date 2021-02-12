@@ -40,8 +40,7 @@ class SMapprox(nn.Module):
         elif len(q.shape) == 3:
             _, l, d = q.shape
             normalizer = 1 / (d ** 0.25)
-            out = []
-            
+        
             q_prime = phi(q * normalizer)
             k_prime = phi(k * normalizer)
 
