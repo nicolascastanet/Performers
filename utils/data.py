@@ -1,3 +1,6 @@
+"""
+Module regroupant les classes et fonctions servant à la récupération et au pré-traitement des données
+"""
 import re
 from pathlib import Path
 
@@ -8,6 +11,9 @@ import torch
 from torch.utils.data import Dataset
 
 class DatasetIMDB(Dataset):
+    """
+    Classe permettant le chargement en mémoire du dataset IMDB (2 classes)
+    """
     def __init__(self, dataset):
         self.dataset = dataset
 
@@ -19,6 +25,9 @@ class DatasetIMDB(Dataset):
         return len(self.dataset)
 
 class DatasetDBpedia(Dataset):
+    """
+    Classe permettant le chargement en mémoire du dataset DBpedia (14 classes)
+    """
     def __init__(self, ds_dbpedia, word2id, OOVID=None, WORDS=None):
         self.vocab_itos = ds_dbpedia.get_vocab().itos
         self.dataset = ds_dbpedia
@@ -39,6 +48,9 @@ class DatasetDBpedia(Dataset):
 
 
 class DatasetLM1B(Dataset):
+    """
+    Classe permettant le chargement en mémoire du dataset LM1B (modèle de langue)
+    """
     def __init__(self, path_folder, word2id, OOVID=None, WORDS=None):
         self.word2id = word2id
         self.OOVID = len(word2id)-2 if OOVID is None else OOVID

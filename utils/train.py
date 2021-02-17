@@ -1,3 +1,6 @@
+"""
+Module regroupant les classes et fonctions liées à l'entrainement
+"""
 import os.path
 
 import numpy as np
@@ -6,13 +9,16 @@ import torch
 
 class InfiniteLoader():
     """
-    To iterate indefinitely on a loader
+    Permet d'itrérer en boucle indéfiniment sur un dataloader
     """
     def __init__(self, loader):
         self.loader = loader
         self.iterator = iter(loader)
         
     def get_batch(self):
+        """
+        Permet de récupérer un batch du loader choisi (itération infinie)
+        """
         try:
             x = next(self.iterator)
         except:
@@ -23,7 +29,28 @@ class InfiniteLoader():
 
 def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_step_val, interval_step_val, \
             path=None, path_early_stopping=None, patience=20, verbose=False):
-    
+    """
+    Permet d'entrainer un modèle avec les paramètres souhaités tout en sauvegardant régulièrement
+    les informations sur le modèle et sur l'entrainement
+
+    Args:
+      train_loader (torch.utils.data.DataLoader): Loader contenant les données de train
+      test_loader (torch.utils.data.DataLoader): Loader contenant les données de test
+      model (torch.nn.Module): Modèle pytorch que l'on souhaite entrainer
+      optimizer (torch.optim.Optimizer): Optimiseur utilisé pour l'entrainement
+      criterion (torch.nn.modules.loss._Loss): Fonction de cout utilisé
+      nb_step (int): Nombre d'itération (de batch) pour l'entrainement
+      nb_step_val (int): Nombre d'itération (de batch) pour le calcul de la loss de validation
+      interval_step_val (int): Nombre d'itération (de batch) entre deux validations
+      path (String): Chemin vers le fichier servant à sauvegarder les informations de l'entrainements et du modèle
+      path_early_stopping (String): Chemin vers le fichier servant pour l'early-stopping
+      patience (int): Nombre d'époque (de phase de validation) maximale 
+                      où la loss de validation ne diminue pas avant d'arreter l'entrainement
+      verbose (bool): Permet d'activer le mode verbeux indiquant notamment une barre de progression et les étapes de l'ealy-stopping
+
+    Returns:
+      Retourne les losses d'entrainements et de validation
+    """
     ############################
     # Prepare verbose settings #
     ############################
@@ -150,6 +177,15 @@ def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_st
 
 
 def get_prediction(model, loader, nb_step=None, verbose=False):
+    """
+    Permet de récupérer un certain nombre de prédictions d'un model sur un certain loader
+
+    Args:
+      model (torch.nn.Module): Modèle pytorch que l'on souhaite utiliser
+      loader (torch.utils.data.DataLoader): Loader contenant les données de test
+      nb_step (int): Nombre d'itération (de batch) pour l'entrainement
+      verbose (bool): Permet d'activer le mode verbeux indiquant une barre de progression
+    """
     
     progress_bar = tqdm if verbose else lambda first_arg, **kwargs: first_arg
     
@@ -169,7 +205,14 @@ def get_prediction(model, loader, nb_step=None, verbose=False):
     return predictions, targets
 
 def get_all_prediction(model, loader, verbose=False):
-    
+    """
+    Permet de récupérer l'ensemble des prédictions d'un model sur un certain loader
+
+    Args:
+      model (torch.nn.Module): Modèle pytorch que l'on souhaite utiliser
+      loader (torch.utils.data.DataLoader): Loader contenant les données de test
+      verbose (bool): Permet d'activer le mode verbeux indiquant une barre de progression
+    """
     progress_bar = tqdm if verbose else lambda first_arg, **kwargs: first_arg
     
     predictions = torch.tensor([])
@@ -189,16 +232,11 @@ class EarlyStopping:
     def __init__(self, patience=7, verbose=False, delta=1e-7, path='checkpoint.pt', trace_func=print):
         """
         Args:
-            patience (int): How long to wait after last time validation loss improved.
-                            Default: 7
-            verbose (bool): If True, prints a message for each validation loss improvement. 
-                            Default: False
-            delta (float): Minimum change in the monitored quantity to qualify as an improvement.
-                            Default: 0
-            path (str): Path for the checkpoint to be saved to.
-                            Default: 'checkpoint.pt'
-            trace_func (function): trace print function.
-                            Default: print            
+            patience (int): Temps d'attente (nombre de validation) avant la terminaison 
+            verbose (bool): Permet d'indiquer des informations comme la loss et un compteur
+            delta (float): Minimum d'augmentation qu'il faut à la loss pour valider le modèle
+            path (str): Chemin vers le fichier pour sauvegarder les informations du modèle
+            trace_func (callable): Permet d'indiquer la fonction à utiliser           
         """
         self.patience = patience
         self.verbose = verbose
@@ -228,7 +266,13 @@ class EarlyStopping:
             self.counter = 0
 
     def save_checkpoint(self, val_loss, model):
-        '''Saves model when validation loss decrease.'''
+        '''
+        Sauvegarde le modèle lorsque la loss de validation diminue
+
+        Args:
+          val_loss (float): Valeur de la loss de validation
+          model (nn.Module): Modèle pytorch que l'on souhaite sauvegarder
+        '''
         if self.verbose:
             self.trace_func(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
         torch.save(model.state_dict(), self.path)

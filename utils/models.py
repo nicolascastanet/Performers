@@ -1,3 +1,6 @@
+"""
+Module regroupant les classes liées au modèle Transformer et Performer
+"""
 import math
 
 import torch.nn.functional as F
@@ -7,14 +10,17 @@ import torch.nn as nn
 
 class SelfAttention(nn.Module):
     """
-    Classe permettant d'effectuer une self attention
+    Permet d'effectuer une self attention
     """
     def __init__(self, emb_dim=50, value_model=True, key_model=True, query_model=True, num_sample=False):
         """
-        Desc
-
-        (Args)
         
+        Args
+          emb_dim (int): Dimension d'embeddings des mots
+          value_model (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model permettant d'obtenir les values à la layer i
+          key_model (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model permettant d'obtenir les keys à la layer i
+          query_model (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model permettant d'obtenir les queries à la layer i
+          num_sample (int/False): Nombre de tirage de vecteur (w) que l'on doit faire pour l'approximation du softmax. False permet de désactiver le mécanisme.
         """
         super().__init__()
         self.value_model = value_model
@@ -66,7 +72,6 @@ class SelfAttention(nn.Module):
             #compute probas
             attention_logits = torch.matmul(queries, torch.transpose(keys, 1, 2))/torch.sqrt(torch.tensor(x.shape[2], dtype=torch.float))
             
-            #import ipdb; ipdb.set_trace()
             attention_logits_masked = attention_logits+mask
             
             probas = F.softmax(attention_logits_masked, dim=2)
@@ -79,10 +84,22 @@ class SelfAttention(nn.Module):
 
 
 class AttentionBlock(nn.Module):
-    
+    """
+    Applique une self-attention avec les normalisations et les changements de représentations qui vont (correspond à un layer).
+    """
     def __init__(self, emb_dim=50, value_model=False, key_model=False, query_model=False, mlp=False, \
         norm1=False, norm2=False, num_sample=False):
-        
+        """
+        Args
+          emb_dim (int): Dimension d'embeddings des mots
+          value_model (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model permettant d'obtenir les values à la layer i
+          key_model (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model permettant d'obtenir les keys à la layer i
+          query_model (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model permettant d'obtenir les queries à la layer i
+          mlp (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model changeant la représentation à la layer i
+          norm1 (bool): Permet d'activer ou non la normalisation suivant la sel-attention 
+          norm2 (bool): Permet d'activer ou non la normalisation avant la couche suivante
+          num_sample (int/False): Nombre de tirage de vecteur (w) que l'on doit faire pour l'approximation du softmax. False permet de désactiver le mécanisme.
+        """
         super().__init__()
         self.mlp = mlp
         self.norm1 = norm1
@@ -129,12 +146,31 @@ class AttentionBlock(nn.Module):
 
 
 class TransPerformer(nn.Module):
-    
+    """
+    Applique une succession de layer d'attention avec un modèle final de classification ou de regression.
+    """
     def __init__(self, embeddings, word2id, emb_dim=50, nb_classe=2, L=3, \
                 max_len=False, num_sample=False, norm1=False, norm2=True, \
                 context_model=False, mlp=False, classifier=None, \
                 value_model=False, key_model=False, query_model=False):
-        
+        """
+        Args
+          embeddings (Tensor/Matrix): Embeddings des mots voulues sous forme de tensor
+          word2id (dict): Dictionnaire des mots du vocabulaire choisi
+          emb_dim (int): Dimension d'embeddings des mots
+          nb_classe (int): nombre de classe du dataset considéré (utilisé pour construire un classifieur par défaut lorsque non fourni)
+          L (int): nombre de couches d'attention
+          max_len (int/False): Longueur maximal utile pour le positionnal encodding. False désactive cette option.
+          num_sample (int/False): Nombre de tirage de vecteur (w) que l'on doit faire pour l'approximation du softmax. False permet de désactiver le mécanisme.
+          norm1 (bool): Permet d'activer ou non la normalisation suivant la self-attention 
+          norm2 (bool): Permet d'activer ou non la normalisation avant la couche suivante
+          context_model (nn.Module): Modèle utiliser avant les couches d'attentions pour modifier l'embeddings utilisé
+          mlp (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model changeant la représentation à la layer i
+          classifier (nn.Module): Modèle suivant les couches d'attentions permettant la classification (ou la régression)
+          value_model (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model permettant d'obtenir les values à la layer i
+          key_model (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model permettant d'obtenir les keys à la layer i
+          query_model (list[nn.Module]): List de longueur L (nombre de layer) contenant à l'indice i le model permettant d'obtenir les queries à la layer i
+        """
         super().__init__()
         self.word2id = word2id
         self.embeddings = torch.tensor(embeddings, dtype=torch.float)
@@ -188,9 +224,20 @@ class TransPerformer(nn.Module):
         return y_hat
 
 
+#TODO :
+#1) vérifier que toutes les fonctions et arguments sont utiles :
+#  - argument "normalize" de "att_hat" qui ne semble pas être utilisé
+#2) Vérifier DocString des méthodes (dont types et descriptions d'arguments)
 
 class SMapprox(nn.Module):
-    def __init__(self,rd, hd, ort=True, pos=True):
+    def __init__(self, rd, hd, ort=True, pos=True):
+        """
+        Args
+          rd (int): Nombre de vecteur (w) à tirer pour l'estimation du softmax 
+          hd (int): Dimension de l'embedding
+          ort (bool): Permet de choisir si les vecteurs aléatoires sont orthogonaux ou non
+          pos (bool): Permet de choisir si on active l'option positive ou non
+        """
         super().__init__()
         self.random_dim = rd
         self.hidden_dim = hd
@@ -199,20 +246,25 @@ class SMapprox(nn.Module):
         self.vects = self.random_vect()
         
     def redrawn(self):
+        """Permet de retirer les vecteurs aléatoires"""
         self.vects = self.random_vect()
 
-    # Vanila Transformer attention implementation
-    def att(self, q, k, v, normalize=True):
-        l, d = q.shape
-        normalizer = 1 / (d ** 0.5) if normalize else 1
-        a = torch.exp(q @ k.T * normalizer)
-        d_inv = torch.diag(1 / (a @ torch.ones(l)))
-        return d_inv @ a @ v
 
-
-    # Perfomer attention implementation using some random feature map phi
+   
     def att_hat(self,q, k, v, phi, normalize=True):
+        """
+        Implémentation du Performer utilisant Favor+ (positive random feature)
 
+        Args:
+          q (Tensor): Tenseur contenant les queries
+          k (Tensor): Tenseur contenant les keys
+          v (Tensor): Tenseur contenant les values
+          phi (callable): Fonction ???
+          normalize (bool): ???
+
+        Return:
+          La matrice Y résultant de Q'.K'_transpose.V où Q'.K'_transpose = SoftMax(Q.K_t)
+        """
         if len(q.shape) == 2:
             l, d = q.shape
             normalizer = 1 / (d ** 0.25)
@@ -242,8 +294,17 @@ class SMapprox(nn.Module):
 
 
 
-    # random feature map
     def phi(self,h, fs):
+        """
+        Calcul des features maps aléatoires
+
+        Args:
+          h (callable): Fonction ??? (reprendre terme du papier peut-être?)
+          fs (list[callable]): Liste de fonction ??? (reprendre terme du papier peut-être?)
+
+        Return:
+          La fonction ??? (reprendre terme du papier peut-être?)
+        """
         return lambda x: (
             h(x)
             / (self.random_dim**1/2)
@@ -256,6 +317,18 @@ class SMapprox(nn.Module):
 
     # Performer "sin/cos" attention
     def sincos_att_hat(self,q, k, v, normalize=True):
+        """
+        Implémentation du Performer utilisant "sin/cos" attention
+
+        Args:
+          q (Tensor): Tenseur contenant les queries
+          k (Tensor): Tenseur contenant les keys
+          v (Tensor): Tenseur contenant les values
+          normalize (bool): ???
+
+        Return:
+          La matrice Y résultant de Q'.K'_transpose.V où Q'.K'_transpose = SoftMax(Q.K_t)
+        """
         def h(x):
             return torch.exp(torch.square(x).sum(axis=-1, keepdims=True) / 2)
 
@@ -268,6 +341,18 @@ class SMapprox(nn.Module):
 
     # Performer "positive" attention
     def positive_att_hat(self,q, k, v, normalize=True):
+        """
+        Implémentation du Performer utilisant la "positive" attention
+
+        Args:
+          q (Tensor): Tenseur contenant les queries
+          k (Tensor): Tenseur contenant les keys
+          v (Tensor): Tenseur contenant les values
+          normalize (bool): ???
+
+        Return:
+          La matrice Y résultant de Q'.K'_transpose.V où Q'.K'_transpose = SoftMax(Q.K_t)
+        """
         def h(x):
             return torch.exp(-torch.square(x).sum(axis=-1, keepdims=True) / 2)
 
@@ -275,15 +360,38 @@ class SMapprox(nn.Module):
         return self.att_hat(q, k, v, kernel, normalize)
 
 
-    # generate IID Gaussian random features
     def iid_gaussian(self,m, d):
+        """
+        Génère des features Gaussiennes aléatoire IID
+
+        Args:
+          m (int): Dimension ???
+          d (int): Dimension ???
+
+        Return:
+          Retourne les features gaussiennes aléatoires de dimension m*d
+        """
         return torch.randn(size=(m, d))
 
 
-    # generate orthogonal Gaussian random features
     def orthogonal_gaussian(self,m, d):
+        """
+        Génère des features othogonales Gaussiennes aléatoires
+
+        Args:
+          m (int): Dimension ???
+          d (int): Dimension ???
+
+        Return:
+          Retourne les features orthogonales gaussiennes aléatoires de dimension m*d
+        """
         def orthogonal_square():
-            # create orthogonal square matrix using Gram-Schmidt
+            """
+            Create orthogonal square matrix using Gram-Schmidt
+
+            Return:
+              ???
+            """
             q, _ = torch.qr(self.iid_gaussian(d, d))
             return q.T
 
@@ -300,15 +408,16 @@ class SMapprox(nn.Module):
         return matrix
 
     def random_vect(self):
+        """
+        Génère des features aléatoires selon les paramètres initiaux
+
+        Return:
+          Retourne les features aléatoires
+        """
         if self.ortho:
             return self.orthogonal_gaussian(self.random_dim, self.hidden_dim)
         else :
             return self.iid_gaussian(self.random_dim, self.hidden_dim)
-
-
-    # mean squared error
-    def mse(self,a, b):
-        return torch.square(a - b).mean()
 
 
     def forward(self,q,k,v,pos=True):
@@ -319,8 +428,23 @@ class SMapprox(nn.Module):
             return self.sincos_att_hat(q,k,v,self.random_vect)
 
 class Contextualiser(nn.Module):
+    """
+    Permet d'effectuer un plongement contextualisé d'une séquence
+    """
     def __init__(self, input_size=50, hidden_size=50, \
                     num_layers=1, batch_first=True, dropout=0., bidirectional=False):
+        """
+        Args:
+          input_size (int): Dimension d'entrée
+          hidden_size (int): Dimension désirée de sortie
+          num_layers (int): Nombre de layer de LSTM empilé
+          batch_first (bool): Indique si la dimension de batch est en première position (True) ou non (False)
+          dropout (float): Probabilité d'appliquer un dropout (seulement entre les couches intermédiaires)
+          bidirectional (bool): Permet de rendre les LSTMs bidirectionnaux (True) ou non (False)
+
+        Return:
+          Retourne les features orthogonales gaussiennes aléatoires de dimension m*d
+        """
         super(Contextualiser, self).__init__()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, \
                                         num_layers=1, batch_first=True, dropout=0., bidirectional=False)

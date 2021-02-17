@@ -1,22 +1,13 @@
-import logging
-import re
-
-import math
 import numpy as np
-#import seaborn as sns
-from pathlib import Path
-from tqdm import tqdm
-import numpy as np
-from datamaestro import prepare_dataset
-import torch.nn.functional as F
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from torch.distributions import Categorical
+import torchtext
+from sklearn.metrics import accuracy_score
 
-from tp10 import DatasetTP9, get_imdb_data
-from tp10 import train, get_prediction
-from tp10 import TransformerQ1Q2, TransformerQ3, Transformer
+from utils.data import DatasetIMDB, DatasetDBpedia, DatasetLM1B, get_imdb_data
+from utils.train import train, get_all_prediction
+from utils.models import TransPerformer, Contextualiser
 
 
 
@@ -36,78 +27,73 @@ def collate_fn(samples):
     return torch.stack(res).long(), torch.tensor(targets)
 
 
+class SampleDataset(Dataset):
+
+    def __init__(self, dataset, nb_sample):
+        self.data = []
+        indices = np.random.choice(len(dataset), size=nb_sample, replace=False)
+        for ind in indices:
+            self.data.append(dataset[ind])
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def __len__(self):
+        return len(self.data)
+
+
+
 if(__name__ == "__main__"):
 
-	word2id, embeddings, train_dataset, test_dataset = get_imdb_data()
+	#Declaration de constantes
+	EMBEDDING_DIM = 50
+	BATCH_SIZE = 16
+	NB_CLASSE = 2
+	CLASSIF_INTER_DIM = 10
+	L = 3
+	NUM_SAMPLE = False #valeur par défaut pour désactiver l'approximation du softmax
+	MAX_LEN = False #valeur par défaut pour désactiver le positinal encodding
+
+	#Récupération de l'embbedings et du dictionnaire
+	
+	word2id, embeddings, train_ds_imdb_tmp, test_ds_imdb_tmp = get_imdb_data(embedding_size=EMBEDDING_DIM)
 	id2word = {value:key for key,value in word2id.items() }
 
-	BATCH_SIZE = 64
-	train_loader = DataLoader(DatasetTP9(train_dataset), collate_fn=collate_fn, shuffle=True, batch_size=BATCH_SIZE)
-	test_loader = DataLoader(DatasetTP9(test_dataset), collate_fn=collate_fn, shuffle=True, batch_size=BATCH_SIZE)
+	#Récupération des données sours forme de dataset/dataloader
+	train_ds_imdb, test_ds_imdb = DatasetIMDB(train_ds_imdb_tmp), DatasetIMDB(test_ds_imdb_tmp)
+	train_dataset, test_dataset = SampleDataset(train_ds_imdb, 200), SampleDataset(test_ds_imdb, 200) #Pour tester avec un extrait des données
+
+	train_loader = DataLoader(train_dataset, collate_fn=collate_fn, shuffle=True, batch_size=BATCH_SIZE)
+	test_loader = DataLoader(test_dataset, collate_fn=collate_fn, shuffle=True, batch_size=BATCH_SIZE)
 	criterion = nn.CrossEntropyLoss()
-	inputDim = 50
 
-	print("##############\n##############")
-	print("Q1 : ...")
-	#Training model 1
-	
-	modelQ1 = TransformerQ1Q2(embeddings=embeddings, word2id=word2id, context_model=None, \
-                       values_model=None, keys_model=None, query_model=None)
+	#Paramétrage du modèle
+	context_model = nn.Identity()#Contextualiser(input_size=EMBEDDING_DIM, hidden_size=EMBEDDING_DIM)
 
-	optimizer = torch.optim.Adam(params=modelQ1.parameters(), lr=5e-3)
-	nb_step = 2000
-	nb_step_val = 150
-	interval_step_val = 200
+	query_model = [nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM, bias=True) for _ in range(L)]
+	key_model = [nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM, bias=True) for _ in range(L)]
+	value_model = [nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM, bias=True) for _ in range(L)]
 
-	train_lossQ1, test_lossQ1 = train(train_loader, test_loader, modelQ1, optimizer, criterion, \
-                                         nb_step=nb_step, nb_step_val=nb_step_val, interval_step_val=interval_step_val,\
-                                         verbose=True, path="checkpointQ1.pt", path_early_stopping="bestParamsQ1.pt")
-    
+	mlp = [nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM, bias=True) for _ in range(L)]
 
-	print("##############\n##############")
-	print("Q2 : ...")
-	#Training model 2
-	max_len = max([data.shape[1] for data,_ in train_loader])
-	#max_len = 3000
+	classifier = nn.Sequential( nn.Linear(EMBEDDING_DIM, CLASSIF_INTER_DIM, bias=True),
+								nn.ReLU(),
+								nn.Linear(CLASSIF_INTER_DIM, NB_CLASSE, bias=True) )
 
-	modelQ2 = TransformerQ1Q2(embeddings=embeddings, word2id=word2id, context_model=None, \
-                       values_model=None, keys_model=None, query_model=None, max_len=max_len)
 
-	optimizer = torch.optim.Adam(params=modelQ2.parameters(), lr=5e-3)
-	nb_step = 2000
-	nb_step_val = 150
-	interval_step_val = 200
+	model = TransPerformer(embeddings=embeddings, word2id=word2id, nb_classe=NB_CLASSE, \
+                L=L, emb_dim=EMBEDDING_DIM, max_len=MAX_LEN, num_sample=NUM_SAMPLE, \
+                norm1=True, norm2=True, \
+                context_model=context_model, classifier=classifier, mlp=mlp, \
+                query_model=query_model, key_model=key_model, value_model=value_model)
 
-	train_lossQ2, test_lossQ2 = train(train_loader, test_loader, modelQ2, optimizer, criterion, \
-                                         nb_step=nb_step, nb_step_val=nb_step_val, interval_step_val=interval_step_val,\
-                                         verbose=True, path="checkpointQ2.pt", path_early_stopping="bestParamsQ2.pt")
 
-	print("##############\n##############")
-	print("Q3 : ...")
-	#Training model 3
-	modelQ3 = TransformerQ3(embeddings=embeddings, word2id=word2id, context_model=None, \
-                       values_model=None, keys_model=None, query_model=None, max_len=max_len)
+	#Paramétrage de l'entrainement & entrainement
+	optimizer = torch.optim.Adam(params=model.parameters())
+	nb_step = 20
+	nb_step_val = 5
+	interval_step_val = 25
 
-	optimizer = torch.optim.Adam(params=modelQ3.parameters(), lr=5e-3)
-	nb_step = 2000
-	nb_step_val = 150
-	interval_step_val = 200
-
-	train_lossQ3, test_lossQ3 = train(train_loader, test_loader, modelQ3, optimizer, criterion, \
-	                                         nb_step=nb_step, nb_step_val=nb_step_val, interval_step_val=interval_step_val,\
-	                                         verbose=True, path="checkpointQ3.pt", path_early_stopping="bestParamsQ3.pt")
-
-	print("##############\n##############")
-	print("QO : ...")
-	#Training model original
-	modelQO = Transformer(embeddings=embeddings, word2id=word2id, context_model=None, \
-                       values_model=None, keys_model=None, query_model=None, max_len=max_len)
-
-	optimizer = torch.optim.Adam(params=modelQ3.parameters(), lr=5e-3)
-	nb_step = 2000
-	nb_step_val = 150
-	interval_step_val = 200
-
-	train_lossQO, test_lossQO = train(train_loader, test_loader, modelQO, optimizer, criterion, \
-	                                         nb_step=nb_step, nb_step_val=nb_step_val, interval_step_val=interval_step_val,\
-	                                         verbose=True, path="checkpointQO.pt", path_early_stopping="bestParamsQO.pt")
+	train_loss, test_loss = train(train_loader, test_loader, model, optimizer, criterion, \
+											nb_step=nb_step, nb_step_val=nb_step_val, interval_step_val=interval_step_val,\
+											verbose=True, path="checkpoint.pt", path_early_stopping="bestParams.pt")
