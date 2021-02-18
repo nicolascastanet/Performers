@@ -3,6 +3,7 @@ Module regroupant les classes et fonctions servant à la récupération et au pr
 """
 import re
 from pathlib import Path
+import os
 
 import numpy as np
 

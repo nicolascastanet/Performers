@@ -97,11 +97,13 @@ def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_st
     ############
     # Training #
     ############
+    device = 'cuda' if next(model.parameters()).is_cuda else 'cpu'
     tmp_train_loss = []
     model.train()
     for step in progress_bar(range(current_step, nb_step), initial=current_step, total=nb_step):
         
         data, labels = train_batchs.get_batch()
+        data,labels = data.to(device),labels.to(device)
 
         optimizer.zero_grad()
 
@@ -125,6 +127,7 @@ def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_st
                 for step_val in range(nb_step_val):
                     
                     data, labels = test_batchs.get_batch()
+                    data,labels = data.to(device),labels.to(device)
 
                     outputs = model(data)
 

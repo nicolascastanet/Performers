@@ -173,7 +173,7 @@ class TransPerformer(nn.Module):
         """
         super().__init__()
         self.word2id = word2id
-        self.embeddings = torch.tensor(embeddings, dtype=torch.float)
+        self.embeddings = nn.Embedding.from_pretrained(torch.tensor(embeddings).float())
         self.classifier = classifier
         self.context_model = context_model
         self.main = nn.Sequential(
@@ -201,7 +201,7 @@ class TransPerformer(nn.Module):
     def forward(self, x):
         
         #embedding
-        emb_x = self.embeddings[x]
+        emb_x = self.embeddings(x)
         
         #positional encoding
         emb_x = self.pe(emb_x) 
@@ -210,7 +210,7 @@ class TransPerformer(nn.Module):
         context_emb = self.context_model(emb_x)
         
         #compute mask        
-        mask = torch.zeros_like(x)
+        mask = torch.zeros_like(x,device = x.get_device() if x.is_cuda else 'cpu')
         mask = mask.float().masked_fill(x==self.word2id["__PAD__"], float('-inf'))\
             [:,None,:].expand(x.shape[0],x.shape[1],x.shape[1])
         
