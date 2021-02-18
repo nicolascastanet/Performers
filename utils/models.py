@@ -210,8 +210,9 @@ class TransPerformer(nn.Module):
         context_emb = self.context_model(emb_x)
         
         #compute mask        
-        mask = torch.where(x==self.word2id["__PAD__"], -float("Inf"), 0.)\
-            .unsqueeze(2).repeat(1,1,emb_x.shape[1]).transpose(1,2)
+        mask = torch.zeros_like(x)
+        mask = mask.float().masked_fill(x==self.word2id["__PAD__"], float('-inf'))\
+            [:,None,:].expand(x.shape[0],x.shape[1],x.shape[1])
         
         #compute self-attention layers
         outputs, _ = self.main((context_emb, mask))
