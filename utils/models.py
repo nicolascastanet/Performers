@@ -244,11 +244,15 @@ class SMapprox(nn.Module):
         self.hidden_dim = hd
         self.ortho = ort
         self.pos = pos
-        self.vects = self.random_vect()
+        vects = self.random_vect()
+        vects.requires_grad = False
+        self.register_buffer(f'vects',vects)
         
     def redrawn(self):
         """Permet de retirer les vecteurs aléatoires"""
-        self.vects = self.random_vect()
+        vects = self.random_vect()
+        vects.requires_grad = False
+        self.register_buffer(f'vects',vects)
 
 
    

@@ -6,6 +6,7 @@ import os.path
 import numpy as np
 from tqdm.auto import tqdm
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 class InfiniteLoader():
     """
@@ -71,10 +72,12 @@ def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_st
         checkpoint = torch.load(path)
         
         model.load_state_dict(checkpoint["model_params"])
+        writer = checkpoint["writer"]
         
         if("early_stopping" in checkpoint):
             early_stopping = checkpoint["early_stopping"]
             path_early_stopping = checkpoint["path_early_stopping"]
+            
         
         current_step = checkpoint["current_step"]
         
@@ -90,9 +93,10 @@ def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_st
         train_loss = []
         eval_loss = []
         
+        writer = SummaryWriter(path)
         if(path_early_stopping is not None):
             early_stopping = EarlyStopping(patience=patience, verbose=verbose, delta=1e-10, path=path_early_stopping)
-        
+    
     
     ############
     # Training #
@@ -114,12 +118,15 @@ def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_st
         tmp_train_loss.append(loss.item())
         loss.backward()
         optimizer.step()
+        if writer : 
+            writer.add_scalar("train_loss",loss,step)
         
         ##############
         # Evaluation #
         ##############
+        
         if(step%interval_step_val==0 or step==nb_step-1):
-            
+            test_accuracy = 0
             with torch.no_grad():
                 
                 tmp_eval_loss = []
@@ -133,8 +140,12 @@ def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_st
 
                     loss = criterion(outputs, labels)
                     tmp_eval_loss.append(loss.item())
+                    test_accuracy += (labels == outputs.argmax(dim=1)).float().mean()                        
 
                 eval_loss.append(np.mean(tmp_eval_loss)) 
+            if writer : 
+                writer.add_scalar("test_loss",np.mean(tmp_eval_loss),step)
+                writer.add_scalar("test_acc",test_accuracy/nb_step_val,step)
             model.train()
             
             ##################
@@ -162,12 +173,13 @@ def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_st
 
                     "train_loss": train_loss,
                     "eval_loss": eval_loss,
+
                 }
                 if(path_early_stopping is not None):
                     checkpoint["early_stopping"] = early_stopping
                     checkpoint["path_early_stopping"] = path_early_stopping
                     
-                torch.save(checkpoint, path)
+                torch.save(checkpoint, path+'checkpoint.pt')
                 
             if(path_early_stopping is not None and early_stopping.early_stop):
                 print("Early stopping")
@@ -175,7 +187,10 @@ def train(train_loader, test_loader, model, optimizer, criterion, nb_step, nb_st
     
     if(path_early_stopping is not None):
         model.load_state_dict(torch.load(path_early_stopping))
-            
+
+    # save best model : 
+    torch.save(model.state_dict(), path +'best_model.pt')
+
     return train_loss, eval_loss
 
 
@@ -196,7 +211,7 @@ def get_prediction(model, loader, nb_step=None, verbose=False):
     
     predictions = torch.tensor([])
     targets = torch.tensor([])
-    
+
     with torch.no_grad():
         for step in progress_bar(range(nb_step)):
             
