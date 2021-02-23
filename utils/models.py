@@ -2,7 +2,7 @@
 Module regroupant les classes liées au modèle Transformer et Performer
 """
 import math
-
+import numpy as np
 import torch.nn.functional as F
 import torch
 import torch.nn as nn
@@ -256,7 +256,7 @@ class SMapprox(nn.Module):
 
 
    
-    def att_hat(self,q, k, v, phi, normalize=True):
+    def att_hat(self,q, k, v, phi):
         """
         Implémentation du Performer utilisant Favor+ (positive random feature)
 
@@ -264,8 +264,8 @@ class SMapprox(nn.Module):
           q (Tensor): Tenseur contenant les queries
           k (Tensor): Tenseur contenant les keys
           v (Tensor): Tenseur contenant les values
-          phi (callable): Fonction ???
-          normalize (bool): ???
+          phi (callable): Fonction feature map
+          
 
         Return:
           La matrice Y résultant de Q'.K'_transpose.V où Q'.K'_transpose = SoftMax(Q.K_t)
@@ -304,11 +304,11 @@ class SMapprox(nn.Module):
         Calcul des features maps aléatoires
 
         Args:
-          h (callable): Fonction ??? (reprendre terme du papier peut-être?)
-          fs (list[callable]): Liste de fonction ??? (reprendre terme du papier peut-être?)
+          h (callable): Fonction type de features  (pos ou sin/cos)
+          fs (list[callable]): Liste de fonction ([sin, cos] ou [exp])
 
         Return:
-          La fonction ??? (reprendre terme du papier peut-être?)
+          fonction features map
         """
         return lambda x: (
             h(x)
@@ -321,7 +321,7 @@ class SMapprox(nn.Module):
 
 
     # Performer "sin/cos" attention
-    def sincos_att_hat(self,q, k, v, normalize=True):
+    def sincos_att_hat(self,q, k, v):
         """
         Implémentation du Performer utilisant "sin/cos" attention
 
@@ -329,7 +329,6 @@ class SMapprox(nn.Module):
           q (Tensor): Tenseur contenant les queries
           k (Tensor): Tenseur contenant les keys
           v (Tensor): Tenseur contenant les values
-          normalize (bool): ???
 
         Return:
           La matrice Y résultant de Q'.K'_transpose.V où Q'.K'_transpose = SoftMax(Q.K_t)
@@ -341,11 +340,11 @@ class SMapprox(nn.Module):
         cos = lambda x: torch.cos(2 * np.pi * x)
 
         kernel = self.phi(h, [sin, cos])
-        return self.att_hat(q, k, v, kernel, normalize)
+        return self.att_hat(q, k, v, kernel)
 
 
     # Performer "positive" attention
-    def positive_att_hat(self,q, k, v, normalize=True):
+    def positive_att_hat(self,q, k, v):
         """
         Implémentation du Performer utilisant la "positive" attention
 
@@ -353,7 +352,6 @@ class SMapprox(nn.Module):
           q (Tensor): Tenseur contenant les queries
           k (Tensor): Tenseur contenant les keys
           v (Tensor): Tenseur contenant les values
-          normalize (bool): ???
 
         Return:
           La matrice Y résultant de Q'.K'_transpose.V où Q'.K'_transpose = SoftMax(Q.K_t)
@@ -362,7 +360,7 @@ class SMapprox(nn.Module):
             return torch.exp(-torch.square(x).sum(axis=-1, keepdims=True) / 2)
 
         kernel = self.phi(h, [torch.exp])
-        return self.att_hat(q, k, v, kernel, normalize)
+        return self.att_hat(q, k, v, kernel)
 
 
     def iid_gaussian(self,m, d):
@@ -370,8 +368,8 @@ class SMapprox(nn.Module):
         Génère des features Gaussiennes aléatoire IID
 
         Args:
-          m (int): Dimension ???
-          d (int): Dimension ???
+          m (int): Dimension : nombre de features aléatoires
+          d (int): Dimension : taille d'embedding
 
         Return:
           Retourne les features gaussiennes aléatoires de dimension m*d
@@ -384,8 +382,8 @@ class SMapprox(nn.Module):
         Génère des features othogonales Gaussiennes aléatoires
 
         Args:
-          m (int): Dimension ???
-          d (int): Dimension ???
+          m (int): Dimension : nombre de features aléatoires
+          d (int): Dimension : taille d'embedding
 
         Return:
           Retourne les features orthogonales gaussiennes aléatoires de dimension m*d
@@ -395,7 +393,7 @@ class SMapprox(nn.Module):
             Create orthogonal square matrix using Gram-Schmidt
 
             Return:
-              ???
+              orthogonal random features 
             """
             q, _ = torch.qr(self.iid_gaussian(d, d))
             return q.T
@@ -428,9 +426,9 @@ class SMapprox(nn.Module):
     def forward(self,q,k,v,pos=True):
         
         if pos:
-            return self.positive_att_hat(q,k,v,self.random_vect)
+            return self.positive_att_hat(q,k,v)
         else:
-            return self.sincos_att_hat(q,k,v,self.random_vect)
+            return self.sincos_att_hat(q,k,v)
 
 class Contextualiser(nn.Module):
     """
